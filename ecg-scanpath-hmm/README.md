@@ -11,7 +11,7 @@ This project applies Hidden Markov Models (HMMs) to analyze eye-tracking scanpat
 - Youssef Kaya (youssef.kaya@um6p.ma)
 
 Course: Computational Theory  
-Institution: UM6p
+University: UM6P
 
 ## Files
 
