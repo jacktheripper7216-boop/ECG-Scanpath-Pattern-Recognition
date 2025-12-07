@@ -104,52 +104,94 @@ def run_evaluation():
     print("\n" + "-" * 60)
     print("RUNNING EVALUATION PIPELINE")
     print("-" * 60)
+
     # Step 1: Load data
-    expert_data, novice_data = load_dataset('scanpath_dataset.csv')
-    print(f"\nDataset: {len(expert_data)} expert, {len(novice_data)} novice sequences")
+    try:
+        expert_data, novice_data = load_dataset('scanpath_dataset.csv')
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        print("Make sure the dataset file exists in the `data/` folder or pass a correct path.")
+        return None
+
+    # Enforce desired evaluation sizes (user-specified)
+    DESIRED_PER_CLASS = 150
+    TRAIN_PER_CLASS = 100
+    TEST_PER_CLASS = 50
+
+    n_expert = len(expert_data)
+    n_novice = len(novice_data)
+
+    # Sample DESIRED_PER_CLASS from each class.
+    # If there are fewer than DESIRED_PER_CLASS samples, oversample with replacement.
+    rng = np.random.RandomState(42)
+
+    if n_expert >= DESIRED_PER_CLASS:
+        expert_idx = rng.choice(np.arange(n_expert), DESIRED_PER_CLASS, replace=False)
+    else:
+        # oversample with replacement
+        expert_idx = rng.choice(np.arange(n_expert), DESIRED_PER_CLASS, replace=True)
+
+    if n_novice >= DESIRED_PER_CLASS:
+        novice_idx = rng.choice(np.arange(n_novice), DESIRED_PER_CLASS, replace=False)
+    else:
+        # oversample with replacement
+        novice_idx = rng.choice(np.arange(n_novice), DESIRED_PER_CLASS, replace=True)
+
+    # Shuffle selected indices and split into TRAIN/TEST
+    rng.shuffle(expert_idx)
+    rng.shuffle(novice_idx)
+
+    expert_selected = [expert_data[i] for i in expert_idx]
+    novice_selected = [novice_data[i] for i in novice_idx]
+
+    expert_train = expert_selected[:TRAIN_PER_CLASS]
+    expert_test = expert_selected[TRAIN_PER_CLASS:TRAIN_PER_CLASS + TEST_PER_CLASS]
+    novice_train = novice_selected[:TRAIN_PER_CLASS]
+    novice_test = novice_selected[TRAIN_PER_CLASS:TRAIN_PER_CLASS + TEST_PER_CLASS]
     
-    # Step 2: Split into train (80%) and test (20%)
-    n_expert_train = int(len(expert_data) * 0.8)
-    n_novice_train = int(len(novice_data) * 0.8)
-    expert_train = expert_data[:n_expert_train]
-    expert_test = expert_data[n_expert_train:]
-    novice_train = novice_data[:n_novice_train]
-    novice_test = novice_data[n_novice_train:]
-    
-    print(f"Training set: {len(expert_train)} expert, {len(novice_train)} novice")
-    print(f"Test set: {len(expert_test)} expert, {len(novice_test)} novice")
-    
+    exp_train = len(expert_train)
+    nov_train = len(novice_train)
+    exp_test = len(expert_test)
+    nov_test = len(novice_test)
+
+    print(f"Training set: {exp_train} expert, {nov_train} novice")
+    print(f"Test set: {exp_test} expert, {nov_test} novice")
+
     # Step 3: Train classifier
     classifier = ScanpathClassifier()
     classifier.train(expert_train, novice_train)
-    
+
     # Step 4: Classify test samples
     y_true = []
     y_pred = []
-    
+
     # Test expert samples
     for obs, states in expert_test:
         pred, _, _ = classifier.classify(obs)
         y_true.append('EXPERT')
         y_pred.append(pred)
-    
+
     # Test novice samples
     for obs, states in novice_test:
         pred, _, _ = classifier.classify(obs)
         y_true.append('NOVICE')
         y_pred.append(pred)
-    
+
     # Step 5: Compute and display results
+    if len(y_true) == 0:
+        print("No test samples available to evaluate.")
+        return classifier
+
     accuracy = compute_accuracy(y_true, y_pred)
     matrix, counts = compute_confusion_matrix(y_true, y_pred)
-    
+
     print("\n" + "=" * 60)
     print("RESULTS")
     print("=" * 60)
     print(f"\nAccuracy: {accuracy:.1%} ({int(accuracy * len(y_true))}/{len(y_true)} correct)")
-    
+
     print_confusion_matrix(matrix, counts)
-    
+
     return classifier
 
 
